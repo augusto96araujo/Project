@@ -20,23 +20,26 @@ export function Dashboard({ onAction }: { onAction: (view: any, action: string) 
       if (!auth.currentUser) return;
       
       try {
-        const ctosQuery = query(collection(db, 'ctos'), where('createdBy', '==', auth.currentUser.uid));
+        const ctosQuery = query(collection(db, 'ctos'));
         const ctosSnap = await getDocs(ctosQuery);
         const totalCtos = ctosSnap.size;
 
-        const clientsQuery = query(collection(db, 'clients'), where('createdBy', '==', auth.currentUser.uid));
+        const clientsQuery = query(collection(db, 'clients'));
         const clientsSnap = await getDocs(clientsQuery);
         const totalClients = clientsSnap.size;
 
-        // Queue count
-        const queueQuery = query(collection(db, 'clients'), where('createdBy', '==', auth.currentUser.uid), where('inWaitingQueue', '==', true));
+        // Queue count (individual for current user)
+        const queueQuery = query(
+          collection(db, 'clients'), 
+          where('inWaitingQueue', '==', true),
+          where('inWaitingQueueBy', '==', auth.currentUser.uid)
+        );
         const queueSnap = await getDocs(queueQuery);
         const queueCount = queueSnap.size;
 
-        // Recent clients
+        // Recent clients (all shared)
         const recentQuery = query(
           collection(db, 'clients'), 
-          where('createdBy', '==', auth.currentUser.uid),
           orderBy('createdAt', 'desc'),
           limit(3)
         );

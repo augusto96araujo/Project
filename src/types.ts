@@ -26,7 +26,10 @@ export interface Client {
   circuit: string;
   address: Address;
   ctoId: string;
+  status?: string;
   inWaitingQueue?: boolean;
+  inWaitingQueueBy?: string;
+  inWaitingQueueByName?: string;
   addedToQueueAt?: any;
   lastMaintenanceDate?: any;
   lastMaintenanceByName?: string;

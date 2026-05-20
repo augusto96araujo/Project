@@ -17,8 +17,8 @@ export function WaitingQueue() {
     // Monitor clients in the queue
     const q = query(
       collection(db, 'clients'),
-      where('createdBy', '==', auth.currentUser.uid),
-      where('inWaitingQueue', '==', true)
+      where('inWaitingQueue', '==', true),
+      where('inWaitingQueueBy', '==', auth.currentUser.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -42,6 +42,8 @@ export function WaitingQueue() {
     try {
       await updateDoc(doc(db, 'clients', client.id), {
         inWaitingQueue: false,
+        inWaitingQueueBy: deleteField(),
+        inWaitingQueueByName: deleteField(),
         addedToQueueAt: deleteField(),
         updatedAt: serverTimestamp()
       });
@@ -80,6 +82,8 @@ export function WaitingQueue() {
           lastMaintenanceDate: todayString,
           lastMaintenanceByName: userName,
           inWaitingQueue: false,
+          inWaitingQueueBy: deleteField(),
+          inWaitingQueueByName: deleteField(),
           addedToQueueAt: deleteField(),
           updatedAt: serverTimestamp()
         });

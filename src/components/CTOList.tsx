@@ -38,7 +38,6 @@ export function CTOList({ searchTerm, forceOpenModal, onModalClose }: CTOListPro
     // Fetch CTOs
     const qCTOs = query(
       collection(db, 'ctos'),
-      where('createdBy', '==', auth.currentUser.uid),
       orderBy('name', 'asc')
     );
 
@@ -52,8 +51,7 @@ export function CTOList({ searchTerm, forceOpenModal, onModalClose }: CTOListPro
 
     // Fetch Client Counts
     const qClients = query(
-      collection(db, 'clients'),
-      where('createdBy', '==', auth.currentUser.uid)
+      collection(db, 'clients')
     );
 
     const unsubscribeClients = onSnapshot(qClients, (snapshot) => {

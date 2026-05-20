@@ -45,9 +45,9 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    // Fetch CTOs for display mapping and details
-    const ctoQuery = query(collection(db, 'ctos'), where('createdBy', '==', auth.currentUser.uid));
-    getDocs(ctoQuery).then(snap => {
+    // Fetch CTOs for display mapping and details with realtime snapshot
+    const ctoQuery = query(collection(db, 'ctos'), orderBy('name', 'asc'));
+    const unsubscribeCtos = onSnapshot(ctoQuery, (snap) => {
       const mapping: Record<string, CTO> = {};
       snap.forEach(doc => {
         mapping[doc.id] = { id: doc.id, ...doc.data() } as CTO;
@@ -57,11 +57,10 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
 
     const q = query(
       collection(db, 'clients'),
-      where('createdBy', '==', auth.currentUser.uid),
       orderBy('name', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeClients = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
       setClients(data);
       setLoading(false);
@@ -69,7 +68,10 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
       handleFirestoreError(error, OperationType.LIST, 'clients');
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeCtos();
+      unsubscribeClients();
+    };
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -88,22 +90,41 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
 
   const handleQueueToggle = async (client: Client) => {
     try {
-      const newState = !client.inWaitingQueue;
-      
-      // Enforce 30-day rule if adding to queue
-      if (newState) {
+      const isCurrentlyInQueue = !!client.inWaitingQueue;
+      const isAddedByMe = client.inWaitingQueueBy === auth.currentUser?.uid;
+
+      if (isCurrentlyInQueue) {
+        if (!isAddedByMe) {
+          const ownerName = client.inWaitingQueueByName || 'outro usuário';
+          alert(`Este cliente já está na fila de espera de outro usuário (${ownerName}) e não pode ser adicionado ou removido por você.`);
+          return;
+        }
+
+        // Removendo da fila (foi adicionado por mim)
+        await updateDoc(doc(db, 'clients', client.id), {
+          inWaitingQueue: false,
+          inWaitingQueueBy: deleteField(),
+          inWaitingQueueByName: deleteField(),
+          addedToQueueAt: deleteField(),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Enforce 30-day rule if adding to queue
         const status = getMaintenanceStatus(client.lastMaintenanceDate);
         if (status.isRed) {
           alert('Este cliente foi visitado recentemente (menos de 30 dias) e não pode ser adicionado à fila de hoje.');
           return;
         }
-      }
 
-      await updateDoc(doc(db, 'clients', client.id), {
-        inWaitingQueue: newState,
-        addedToQueueAt: newState ? serverTimestamp() : deleteField(),
-        updatedAt: serverTimestamp()
-      });
+        // Adicionando à fila por mim
+        await updateDoc(doc(db, 'clients', client.id), {
+          inWaitingQueue: true,
+          inWaitingQueueBy: auth.currentUser?.uid || 'desconhecido',
+          inWaitingQueueByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Técnico',
+          addedToQueueAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `clients/${client.id}`);
     }
@@ -303,7 +324,21 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
                   <tr key={client.id} className={cn("transition-colors group", colorClass)}>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{client.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{client.name}</span>
+                          {client.inWaitingQueue && (
+                            <span className={cn(
+                              "text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider",
+                              client.inWaitingQueueBy === auth.currentUser?.uid
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            )}>
+                              {client.inWaitingQueueBy === auth.currentUser?.uid
+                                ? "Fila (Você)"
+                                : `Fila (${client.inWaitingQueueByName})`}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] font-medium text-slate-400">{client.cpf}</span>
                       </div>
                     </td>
@@ -391,12 +426,22 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
                         className={cn(
                           "p-2 rounded-lg transition-all shadow-sm border",
                           client.inWaitingQueue 
-                            ? "bg-amber-50 text-amber-600 border-amber-200" 
+                            ? client.inWaitingQueueBy === auth.currentUser?.uid
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                              : "bg-amber-50/50 text-amber-600 border-amber-200/50"
                             : getMaintenanceStatus(client.lastMaintenanceDate).isRed
                               ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed"
                               : "bg-white text-slate-400 hover:text-indigo-600 border-transparent hover:border-slate-200"
                         )}
-                        title={client.inWaitingQueue ? "Remover da fila" : getMaintenanceStatus(client.lastMaintenanceDate).isRed ? "Visita muito recente (< 30 dias)" : "Adicionar à fila"}
+                        title={
+                          client.inWaitingQueue
+                            ? client.inWaitingQueueBy === auth.currentUser?.uid
+                              ? "Na sua Fila (Clique para remover)"
+                              : `Na fila de ${client.inWaitingQueueByName || 'outro usuário'}`
+                            : getMaintenanceStatus(client.lastMaintenanceDate).isRed
+                              ? "Visita muito recente (< 30 dias)"
+                              : "Adicionar à fila"
+                        }
                       >
                         {client.inWaitingQueue ? <UserCheck className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </button>
@@ -447,7 +492,21 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
                 {/* Smaller Name & Maint info */}
                 <div className="flex justify-between items-start pr-8">
                   <div>
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-tight truncate max-w-[150px]">{client.name}</h3>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-tight truncate max-w-[150px]">{client.name}</h3>
+                      {client.inWaitingQueue && (
+                        <span className={cn(
+                          "text-[7px] px-1 py-0.5 rounded-full font-bold uppercase tracking-wider",
+                          client.inWaitingQueueBy === auth.currentUser?.uid
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        )}>
+                          {client.inWaitingQueueBy === auth.currentUser?.uid
+                            ? "Fila (Você)"
+                            : `Fila (${client.inWaitingQueueByName})`}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Calendar className="w-2.5 h-2.5 text-slate-400" />
                       <span className="text-[9px] font-bold text-slate-400 uppercase">Ult. Visita: {maintStatus.text}</span>
@@ -537,18 +596,24 @@ export function ClientList({ searchTerm, forceOpenModal, onModalClose }: ClientL
                 <div className="pt-2 flex justify-between items-center">
                    <button
                     onClick={() => handleQueueToggle(client)}
-                    disabled={!client.inWaitingQueue && maintStatus.isRed}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-2 rounded-lg border font-bold text-[10px] uppercase tracking-widest transition-all",
                       client.inWaitingQueue 
-                        ? "bg-amber-50 text-amber-700 border-amber-200" 
+                        ? client.inWaitingQueueBy === auth.currentUser?.uid
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-amber-50/50 text-amber-700 border-amber-200/50"
                         : maintStatus.isRed
                           ? "bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed"
                           : "bg-white text-indigo-600 border-indigo-100"
                     )}
+                    disabled={!client.inWaitingQueue && maintStatus.isRed}
                   >
                     {client.inWaitingQueue ? (
-                      <><UserCheck className="w-3.5 h-3.5" /> Fila</>
+                      client.inWaitingQueueBy === auth.currentUser?.uid ? (
+                        <><UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Fila (Você)</>
+                      ) : (
+                        <><UserCheck className="w-3.5 h-3.5 text-amber-600" /> Fila ({client.inWaitingQueueByName || 'Outro'})</>
+                      )
                     ) : maintStatus.isRed ? (
                       <><Clock className="w-3.5 h-3.5" /> Recente</>
                     ) : (

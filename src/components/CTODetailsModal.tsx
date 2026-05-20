@@ -25,8 +25,7 @@ export function CTODetailsModal({ isOpen, onClose, cto }: CTODetailsModalProps) 
     setLoading(true);
     const q = query(
       collection(db, 'clients'),
-      where('ctoId', '==', cto.id),
-      where('createdBy', '==', auth.currentUser.uid)
+      where('ctoId', '==', cto.id)
     );
 
     getDocs(q).then(snap => {
@@ -56,26 +55,54 @@ export function CTODetailsModal({ isOpen, onClose, cto }: CTODetailsModalProps) 
 
   const handleQueueToggle = async (client: Client) => {
     try {
-      const newState = !client.inWaitingQueue;
-      
-      // Enforce 30-day rule if adding to queue
-      if (newState) {
+      const isCurrentlyInQueue = !!client.inWaitingQueue;
+      const isAddedByMe = client.inWaitingQueueBy === auth.currentUser?.uid;
+
+      if (isCurrentlyInQueue) {
+        if (!isAddedByMe) {
+          const ownerName = client.inWaitingQueueByName || 'outro usuário';
+          alert(`Este cliente já está na fila de espera de outro usuário (${ownerName}) e não pode ser adicionado ou removido por você.`);
+          return;
+        }
+
+        // Removendo da fila (foi adicionado por mim)
+        const updateData = {
+          inWaitingQueue: false,
+          inWaitingQueueBy: deleteField(),
+          inWaitingQueueByName: deleteField(),
+          addedToQueueAt: deleteField(),
+          updatedAt: serverTimestamp()
+        };
+        await updateDoc(doc(db, 'clients', client.id), updateData);
+        // Update local state
+        setClients(prev => prev.map(c => c.id === client.id ? { ...c, inWaitingQueue: false, inWaitingQueueBy: undefined, inWaitingQueueByName: undefined } : c));
+        if (selectedClient?.id === client.id) {
+          setSelectedClient(prev => prev ? { ...prev, inWaitingQueue: false, inWaitingQueueBy: undefined, inWaitingQueueByName: undefined } : null);
+        }
+      } else {
+        // Enforce 30-day rule if adding to queue
         const status = getMaintenanceStatus(client.lastMaintenanceDate);
         if (status.isRed) {
           alert('Este cliente foi visitado recentemente (menos de 30 dias) e não pode ser adicionado à fila de hoje.');
           return;
         }
-      }
 
-      await updateDoc(doc(db, 'clients', client.id), {
-        inWaitingQueue: newState,
-        addedToQueueAt: newState ? serverTimestamp() : deleteField(),
-        updatedAt: serverTimestamp()
-      });
-      // Update local state
-      setClients(prev => prev.map(c => c.id === client.id ? { ...c, inWaitingQueue: newState } : c));
-      if (selectedClient?.id === client.id) {
-        setSelectedClient(prev => prev ? { ...prev, inWaitingQueue: newState } : null);
+        // Adicionando à fila por mim
+        const qBy = auth.currentUser?.uid || 'desconhecido';
+        const qByName = auth.currentUser?.displayName || auth.currentUser?.email || 'Técnico';
+        const updateData = {
+          inWaitingQueue: true,
+          inWaitingQueueBy: qBy,
+          inWaitingQueueByName: qByName,
+          addedToQueueAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        await updateDoc(doc(db, 'clients', client.id), updateData);
+        // Update local state
+        setClients(prev => prev.map(c => c.id === client.id ? { ...c, inWaitingQueue: true, inWaitingQueueBy: qBy, inWaitingQueueByName: qByName } : c));
+        if (selectedClient?.id === client.id) {
+          setSelectedClient(prev => prev ? { ...prev, inWaitingQueue: true, inWaitingQueueBy: qBy, inWaitingQueueByName: qByName } : null);
+        }
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `clients/${client.id}`);
@@ -356,10 +383,17 @@ export function CTODetailsModal({ isOpen, onClose, cto }: CTODetailsModalProps) 
                       {selectedClient.inWaitingQueue ? (
                         <button 
                            onClick={() => handleQueueToggle(selectedClient)}
-                           className="w-full py-3.5 font-bold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 border shadow-sm bg-amber-50 text-amber-700 border-amber-200"
+                           className={cn(
+                             "w-full py-3.5 font-bold text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 border shadow-sm",
+                             selectedClient.inWaitingQueueBy === auth.currentUser?.uid
+                               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                               : "bg-amber-50/70 text-amber-700 border-amber-200/50"
+                           )}
                         >
                           <UserCheck className="w-4 h-4" />
-                          Na Fila (Remover)
+                          {selectedClient.inWaitingQueueBy === auth.currentUser?.uid
+                            ? "Fila (Você) - Remover"
+                            : `Fila (${selectedClient.inWaitingQueueByName || 'Outro'})`}
                         </button>
                       ) : (
                         <button 
