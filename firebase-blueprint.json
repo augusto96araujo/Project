@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "CTO": {
+      "title": "CTO",
+      "description": "Optical Termination Box (Caixa de Terminação Óptica)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Identifier name or number of the CTO" },
+        "location": { "type": "string", "description": "Physical location description" },
+        "capacity": { "type": "integer", "description": "Number of available ports" },
+        "address": {
+          "type": "object",
+          "properties": {
+            "cep": { "type": "string" },
+            "street": { "type": "string" },
+            "number": { "type": "string" },
+            "neighborhood": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" }
+          },
+          "required": ["cep", "street", "number"]
+        },
+        "createdBy": { "type": "string", "description": "User ID of the creator" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "createdBy"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Information for a client connected to a CTO",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "cpf": { "type": "string" },
+        "port": { "type": "integer" },
+        "circuit": { "type": "string" },
+        "ctoId": { "type": "string", "description": "Reference to the CTO document ID" },
+        "inWaitingQueue": { "type": "boolean", "description": "Whether the client is in the daily visit queue" },
+        "addedToQueueAt": { "type": "string", "format": "date-time" },
+        "lastMaintenanceDate": { "type": "string", "format": "date", "description": "Last time maintenance was performed (YYYY-MM-DD)" },
+        "lastMaintenanceByName": { "type": "string", "description": "Name of the user who performed the last maintenance" },
+        "createdBy": { "type": "string" },
+        "address": {
+          "type": "object",
+          "properties": {
+            "cep": { "type": "string" },
+            "street": { "type": "string" },
+            "number": { "type": "string" },
+            "neighborhood": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" }
+          },
+          "required": ["cep", "street", "number"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "cpf", "port", "circuit", "ctoId", "address", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/ctos/{ctoId}": {
+      "schema": "CTO",
+      "description": "Collection of all CTOs"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Collection of all clients"
+    }
+  }
+}

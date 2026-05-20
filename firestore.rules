@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    
+    function isValidAddress(addr) {
+      return addr.cep is string && addr.cep.size() >= 8 && addr.cep.size() <= 10
+          && addr.street is string && addr.street.size() > 0
+          && addr.number is string && addr.number.size() > 0
+          && addr.neighborhood is string
+          && addr.city is string
+          && addr.state is string;
+    }
+
+    // Phase 4: Drafting the "Fortress" Rules
+
+    match /ctos/{ctoId} {
+      allow get: if isSignedIn() && isValidId(ctoId);
+      allow list: if isSignedIn(); // In a real app we might filter by owner, but for now simple auth is ok as requested
+
+      function isValidCTO(data) {
+        return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+            && (data.get('location', '') is string && data.location.size() <= 200)
+            && (data.get('address', null) == null || isValidAddress(data.address))
+            && data.capacity is int
+            && data.createdBy == request.auth.uid;
+      }
+
+      allow create: if isSignedIn()
+                   && isValidId(ctoId)
+                   && isValidCTO(incoming())
+                   && incoming().createdAt == request.time;
+
+      allow update: if isSignedIn()
+                   && isValidId(ctoId)
+                   && isValidCTO(incoming())
+                   && incoming().createdBy == existing().createdBy
+                   && incoming().createdAt == existing().createdAt
+                   && incoming().updatedAt == request.time
+                   && (
+                     // Action: Update details
+                     incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'capacity', 'address', 'updatedAt'])
+                   );
+
+      allow delete: if isSignedIn() && existing().createdBy == request.auth.uid;
+    }
+
+    match /clients/{clientId} {
+      allow get: if isSignedIn() && isValidId(clientId);
+      allow list: if isSignedIn();
+
+      function isValidClient(data) {
+        return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+            && data.cpf is string && data.cpf.size() >= 11 && data.cpf.size() <= 14
+            && data.port is int && data.port >= 1
+            && data.circuit is string && data.circuit.size() > 0
+            && data.ctoId is string && data.ctoId.size() > 0
+            && isValidAddress(data.address)
+            && (data.get('status', 'Ativo') is string)
+            && (data.get('lastMaintenanceDate', '') is string || data.get('lastMaintenanceDate', null) == null)
+            && (data.get('lastMaintenanceByName', '') is string || data.get('lastMaintenanceByName', null) == null)
+            && (data.get('inWaitingQueue', false) is bool)
+            && (data.get('addedToQueueAt', null) == null || data.addedToQueueAt is timestamp)
+            && data.createdBy == request.auth.uid;
+      }
+
+      allow create: if isSignedIn()
+                   && isValidId(clientId)
+                   && isValidClient(incoming())
+                   && exists(/databases/$(database)/documents/ctos/$(incoming().ctoId))
+                   && incoming().createdAt == request.time;
+
+      allow update: if isSignedIn()
+                   && isValidId(clientId)
+                   && isValidClient(incoming())
+                   && incoming().createdBy == existing().createdBy
+                   && incoming().createdAt == existing().createdAt
+                   && incoming().updatedAt == request.time
+                   && (
+                     // Action: Update client info or maintenance/queue status
+                     incoming().diff(existing()).affectedKeys().hasOnly(['name', 'cpf', 'port', 'circuit', 'address', 'updatedAt', 'ctoId', 'lastMaintenanceDate', 'lastMaintenanceByName', 'inWaitingQueue', 'addedToQueueAt'])
+                   );
+
+      allow delete: if isSignedIn() && existing().createdBy == request.auth.uid;
+    }
+  }
+}
