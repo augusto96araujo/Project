@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError } from '../lib/firebase';
-import { collection, query, getDocs, where, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, serverTimestamp, setDoc, updateDoc, orderBy } from 'firebase/firestore';
 import { X, Save, Users, CreditCard, Box, Loader2, Search, MapPin, Calendar, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Client, CTO, OperationType } from '../types';
@@ -43,7 +43,7 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
     // Load CTOs for selection
     setLoadingCtos(true);
     setErrorMessage(null);
-    const q = query(collection(db, 'ctos'), where('createdBy', '==', auth.currentUser.uid));
+    const q = query(collection(db, 'ctos'), orderBy('name', 'asc'));
     getDocs(q).then(snap => {
       setCtos(snap.docs.map(d => ({ id: d.id, ...d.data() } as CTO)));
       setLoadingCtos(false);
@@ -130,8 +130,7 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
       const qPort = query(
         collection(db, 'clients'),
         where('ctoId', '==', formData.ctoId),
-        where('port', '==', formData.port),
-        where('createdBy', '==', auth.currentUser.uid)
+        where('port', '==', formData.port)
       );
       const snapPort = await getDocs(qPort);
       const isOccupiedByOther = snapPort.docs.some(d => d.id !== client?.id);
@@ -150,8 +149,7 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
       if (!client) {
         const qCpf = query(
           collection(db, 'clients'),
-          where('cpf', '==', formData.cpf),
-          where('createdBy', '==', auth.currentUser.uid)
+          where('cpf', '==', formData.cpf)
         );
         const snapCpf = await getDocs(qCpf);
         if (!snapCpf.empty) {
@@ -171,8 +169,7 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
       // 4. Check for Duplicate Circuit
       const qCircuit = query(
         collection(db, 'clients'),
-        where('circuit', '==', formData.circuit),
-        where('createdBy', '==', auth.currentUser.uid)
+        where('circuit', '==', formData.circuit)
       );
       const snapCircuit = await getDocs(qCircuit);
       const duplicateCircuit = snapCircuit.docs.find(d => d.id !== client?.id);

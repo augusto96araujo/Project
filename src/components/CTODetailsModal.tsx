@@ -440,8 +440,7 @@ export function CTODetailsModal({ isOpen, onClose, cto }: CTODetailsModalProps) 
               if (cto && auth.currentUser) {
                 const q = query(
                   collection(db, 'clients'),
-                  where('ctoId', '==', cto.id),
-                  where('createdBy', '==', auth.currentUser.uid)
+                  where('ctoId', '==', cto.id)
                 );
                 getDocs(q).then(snap => {
                   const updatedClients = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
