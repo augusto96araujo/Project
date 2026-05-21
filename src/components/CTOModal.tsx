@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError } from '../lib/firebase';
-import { collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, setDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { X, Save, Box, MapPin, Hash, Loader2, Home, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CTO, OperationType, Address } from '../types';
@@ -27,6 +27,21 @@ export function CTOModal({ isOpen, onClose, cto }: CTOModalProps) {
   });
   const [submitting, setSubmitting] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
+  const [existingCtos, setExistingCtos] = useState<CTO[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      getDocs(collection(db, 'ctos'))
+        .then(snap => {
+          setExistingCtos(snap.docs.map(d => ({ id: d.id, ...d.data() } as CTO)));
+        })
+        .catch(err => console.error("Erro ao carregar CTOs existentes:", err));
+    }
+  }, [isOpen]);
+
+  const isDuplicateName = formData.name.trim() !== '' && existingCtos.some(c => 
+    (!cto || c.id !== cto.id) && c.name.trim().toLowerCase() === formData.name.trim().toLowerCase()
+  );
 
   useEffect(() => {
     if (cto) {
@@ -96,6 +111,7 @@ export function CTOModal({ isOpen, onClose, cto }: CTOModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
+    if (isDuplicateName) return;
 
     setSubmitting(true);
     try {
@@ -165,7 +181,7 @@ export function CTOModal({ isOpen, onClose, cto }: CTOModalProps) {
               {/* Technical Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2 col-span-2 sm:col-span-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Identificação</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 font-sans">Identificação</label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
                     <input
@@ -174,9 +190,18 @@ export function CTOModal({ isOpen, onClose, cto }: CTOModalProps) {
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Ex: CTO-01"
-                      className="w-full pl-9 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all outline-none"
+                      className={`w-full pl-9 pr-4 py-3 bg-slate-50 border rounded-xl text-xs focus:ring-2 transition-all outline-none ${
+                        isDuplicateName 
+                          ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' 
+                          : 'border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white'
+                      }`}
                     />
                   </div>
+                  {isDuplicateName && (
+                    <p className="text-[10px] font-semibold text-red-500 mt-1 ml-1 leading-normal font-sans">
+                      Esta CTO já está cadastrada no sistema.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2 col-span-2 sm:col-span-1">
@@ -295,7 +320,7 @@ export function CTOModal({ isOpen, onClose, cto }: CTOModalProps) {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || isDuplicateName}
                   className="flex-3 py-3 bg-indigo-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-100"
                 >
                   {submitting ? (

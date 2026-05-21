@@ -37,6 +37,22 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
   const [fetchingCep, setFetchingCep] = useState(false);
   const [errorMessage, setErrorMessage] = useState<{title: string, message: string, type: 'error' | 'warning' | 'migration', existingClient?: any} | null>(null);
 
+  const [ctoSearch, setCtoSearch] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isDropdownOpen) {
+      if (formData.ctoId) {
+        const selected = ctos.find(c => c.id === formData.ctoId);
+        if (selected) {
+          setCtoSearch(selected.name);
+        }
+      } else {
+        setCtoSearch('');
+      }
+    }
+  }, [formData.ctoId, ctos, isDropdownOpen]);
+
   useEffect(() => {
     if (!auth.currentUser || !isOpen) return;
 
@@ -217,6 +233,10 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
     }
   };
 
+  const filteredCtos = ctos.filter(cto => 
+    cto.name.toLowerCase().includes(ctoSearch.toLowerCase())
+  );
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -366,19 +386,74 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
                   <div className="space-y-2">
                     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1">Caixa CTO Vinculada</label>
                     <div className="relative">
-                      <Box className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                      <select
+                      <Box className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10 pointer-events-none" />
+                      <input
                         required
+                        type="text"
                         disabled={ctos.length === 0}
-                        value={formData.ctoId}
-                        onChange={(e) => setFormData({ ...formData, ctoId: e.target.value })}
-                        className="w-full pl-11 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all outline-none appearance-none font-bold text-slate-700 disabled:opacity-50"
-                      >
-                        <option value="">{loadingCtos ? 'Carregando CTOs...' : 'Selecione...'}</option>
-                        {ctos.map(cto => (
-                          <option key={cto.id} value={cto.id}>{cto.name}</option>
-                        ))}
-                      </select>
+                        placeholder={loadingCtos ? 'Carregando CTOs...' : 'Comece a digitar o nome da CTO...'}
+                        value={ctoSearch}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCtoSearch(val);
+                          setIsDropdownOpen(true);
+                          
+                          // Check if typed name matches exactly with any CTO
+                          const matched = ctos.find(c => c.name.trim().toLowerCase() === val.trim().toLowerCase());
+                          if (matched) {
+                            setFormData(prev => ({ ...prev, ctoId: matched.id }));
+                          } else {
+                            setFormData(prev => ({ ...prev, ctoId: '' }));
+                          }
+                        }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        onBlur={() => setIsDropdownOpen(false)}
+                        className="w-full pl-11 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all outline-none font-bold text-slate-700 disabled:opacity-50"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400">
+                        <Search className="w-4 h-4" />
+                      </div>
+
+                      <AnimatePresence>
+                        {isDropdownOpen && ctos.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 divide-y divide-slate-100"
+                          >
+                            {filteredCtos.length > 0 ? (
+                              filteredCtos.map(cto => (
+                                <button
+                                  key={cto.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault(); // Prevents input blur
+                                    setFormData(prev => ({ ...prev, ctoId: cto.id }));
+                                    setCtoSearch(cto.name);
+                                    setIsDropdownOpen(false);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-4 py-3 text-xs font-semibold flex items-center justify-between transition-colors",
+                                    formData.ctoId === cto.id 
+                                      ? "bg-indigo-50 text-indigo-700" 
+                                      : "text-slate-600 hover:bg-slate-50"
+                                  )}
+                                >
+                                  <span>{cto.name}</span>
+                                  {formData.ctoId === cto.id && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-4 py-3 text-xs text-slate-400 italic">
+                                Nenhuma CTO correspondente
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
