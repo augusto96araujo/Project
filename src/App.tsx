@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, updateProfile } from 'firebase/auth';
-import { Activity, Clock, LogOut, Users, Box, ChevronRight, Loader2, ArrowRightLeft, Search, Network, KeyRound, User as UserIcon, AlertCircle, Trash2 } from 'lucide-react';
+import { Activity, Clock, LogOut, Users, Box, ChevronRight, Loader2, ArrowRightLeft, Search, Network, KeyRound, User as UserIcon, AlertCircle, Trash2, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CTOList } from './components/CTOList';
 import { ClientList } from './components/ClientList';
@@ -24,6 +24,14 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Clear database states
+  const [isClearDbModalOpen, setIsClearDbModalOpen] = useState(false);
+  const [clearDbPassword, setClearDbPassword] = useState('');
+  const [showClearDbPassword, setShowClearDbPassword] = useState(false);
+  const [clearDbError, setClearDbError] = useState<string | null>(null);
+  const [isClearingDb, setIsClearingDb] = useState(false);
+  const [clearDbSuccess, setClearDbSuccess] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -139,13 +147,24 @@ export default function App() {
     setPasswordInput('');
   };
 
-  const handleClearDatabase = async () => {
-    if (!window.confirm("ATENÇÃO: Você tem certeza que deseja APAGAR todas as CTOs e todos os clientes cadastrados? Esta ação é irreversível e deixará o site em branco para começar o uso.")) {
+  const handleClearDatabase = () => {
+    setClearDbPassword('');
+    setClearDbError(null);
+    setClearDbSuccess(false);
+    setIsClearDbModalOpen(true);
+  };
+
+  const onConfirmClearDatabase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClearDbError(null);
+
+    if (clearDbPassword !== "Gugu020996!") {
+      setClearDbError("Senha incorreta! O banco de dados não foi zerado.");
       return;
     }
-    
+
+    setIsClearingDb(true);
     try {
-      setLoading(true);
       const { collection, getDocs, deleteDoc, doc } = await import('firebase/firestore');
       const { db } = await import('./lib/firebase');
       
@@ -161,13 +180,12 @@ export default function App() {
         await deleteDoc(doc(db, 'ctos', docSnap.id));
       }
       
-      alert("Banco de dados limpo com sucesso! Todas as CTOs e clientes foram removidos para começar o uso em branco.");
-      window.location.reload();
+      setClearDbSuccess(true);
     } catch (err: any) {
       console.error(err);
-      alert("Erro ao limpar banco de dados: " + err.message);
+      setClearDbError("Erro ao limpar banco de dados: " + err.message);
     } finally {
-      setLoading(false);
+      setIsClearingDb(false);
     }
   };
 
@@ -442,6 +460,133 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Custom Modal for DB Clear */}
+      <AnimatePresence>
+        {isClearDbModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                if (!isClearingDb) setIsClearDbModalOpen(false);
+              }}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-md"
+            />
+
+            {/* Modal Body */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.35 }}
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10"
+            >
+              {clearDbSuccess ? (
+                <div className="p-8 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 mb-4 animate-bounce">
+                    <Activity className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 mb-2 font-sans">Banco de Dados Zerado!</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-xs mb-6">
+                    Todas as CTOs e clientes cadastrados foram excluídos com sucesso. O sistema foi restaurado para o estado em branco original.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClearDbModalOpen(false);
+                      window.location.reload();
+                    }}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-100"
+                  >
+                    Recarregar Sistema
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={onConfirmClearDatabase} className="p-6 sm:p-8">
+                  <div className="flex items-center gap-3.5 mb-5">
+                    <div className="w-11 h-11 bg-red-50 rounded-xl flex items-center justify-center text-red-600 shrink-0">
+                      <ShieldAlert className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 tracking-tight leading-none">Limpar Banco de Dados</h3>
+                      <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest mt-1.5">Aviso de Segurança</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-red-50/50 rounded-xl border border-red-100/50 mb-6">
+                    <p className="text-xs text-red-700 font-medium leading-relaxed">
+                      Esta ação irá <strong className="font-extrabold text-red-800">deletar permanentemente</strong> todos os clientes cadastrados e todas as caixas CTO. Esta ação <span className="underline font-bold">não pode ser desfeita</span>.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Confirmação</label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                        <input
+                          required
+                          type={showClearDbPassword ? "text" : "password"}
+                          value={clearDbPassword}
+                          onChange={(e) => setClearDbPassword(e.target.value)}
+                          placeholder="Digite a senha de administrador..."
+                          disabled={isClearingDb}
+                          className={cn(
+                            "w-full pl-10 pr-10 py-3 bg-slate-50 border rounded-xl text-xs focus:ring-2 transition-all outline-none",
+                            clearDbError 
+                              ? "border-red-300 focus:ring-red-500/20 focus:border-red-400" 
+                              : "border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500"
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowClearDbPassword(!showClearDbPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                        >
+                          {showClearDbPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {clearDbError && (
+                        <p className="text-[10px] font-semibold text-red-500 mt-1.5 ml-1 leading-normal">
+                          {clearDbError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-8">
+                    <button
+                      type="button"
+                      disabled={isClearingDb}
+                      onClick={() => setIsClearDbModalOpen(false)}
+                      className="flex-1 py-3 border border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isClearingDb || !clearDbPassword}
+                      className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-red-100"
+                    >
+                      {isClearingDb ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Zerando...</span>
+                        </>
+                      ) : (
+                        <span>Zerar Banco</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
