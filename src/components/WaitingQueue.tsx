@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError } from '../lib/firebase';
-import { collection, query, onSnapshot, where, doc, updateDoc, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, doc, updateDoc, serverTimestamp, writeBatch, deleteField, orderBy } from 'firebase/firestore';
 import { Users, Trash2, MapPin, Calendar, CheckCircle2, Clock, Navigation, ExternalLink, Activity, AlertCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Client, OperationType } from '../types';
+import { Client, OperationType, CTO } from '../types';
 import { cn, getMaintenanceStatus } from '../lib/utils';
 
 export function WaitingQueue() {
   const [queue, setQueue] = useState<Client[]>([]);
+  const [ctos, setCtos] = useState<Record<string, CTO>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
+
+    // Monitor CTOs in real-time for display mapping
+    const ctoQuery = query(collection(db, 'ctos'), orderBy('name', 'asc'));
+    const unsubscribeCtos = onSnapshot(ctoQuery, (snap) => {
+      const mapping: Record<string, CTO> = {};
+      snap.forEach(doc => {
+        mapping[doc.id] = { id: doc.id, ...doc.data() } as CTO;
+      });
+      setCtos(mapping);
+    });
 
     // Monitor clients in the queue
     const q = query(
@@ -21,7 +32,7 @@ export function WaitingQueue() {
       where('inWaitingQueueBy', '==', auth.currentUser.uid)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeClients = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
       // Sort by addedToQueueAt (if available) - oldest first
       data.sort((a, b) => {
@@ -35,7 +46,10 @@ export function WaitingQueue() {
       handleFirestoreError(error, OperationType.LIST, 'clients');
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeCtos();
+      unsubscribeClients();
+    };
   }, []);
 
   const handleRemoveFromQueue = async (client: Client) => {
@@ -163,22 +177,48 @@ export function WaitingQueue() {
                       <div className="w-14 h-14 bg-indigo-600 rounded-[1.25rem] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-100 shrink-0 group-hover:scale-110 transition-transform">
                         {index + 1}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-black text-lg text-slate-900 tracking-tight">{client.name}</h3>
-                          <div className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-100">
-                            Porta {client.port}
-                          </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-1 mb-4">
+                          <h3 className="font-black text-lg text-slate-900 tracking-tight leading-none">{client.name}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {client.address.street}, {client.address.number} — {maintStatus.text}
+                          </p>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6">
-                          <div className="flex items-center gap-2.5 text-xs text-slate-500 font-bold group-hover:text-slate-700">
-                            <MapPin className="w-4 h-4 text-indigo-500" />
-                            {client.address.street}, {client.address.number}
+                        {/* New Metadata Grid showing CPF, CTO, PORT, CIRCUITO, BAIRRO */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-w-4xl">
+                          {/* CPF */}
+                          <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">CPF</span>
+                            <span className="text-xs font-bold text-slate-700 font-mono mt-0.5">{client.cpf || 'Não informado'}</span>
                           </div>
-                          <div className="flex items-center gap-2.5 text-xs text-slate-500 font-bold group-hover:text-slate-700">
-                            <Calendar className="w-4 h-4 text-indigo-500" />
-                            {maintStatus.text}
+
+                          {/* CTO */}
+                          <div className="bg-indigo-50/40 border border-indigo-100/50 rounded-xl p-2.5 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-black text-indigo-400 tracking-wider">CTO</span>
+                            <span className="text-xs font-bold text-indigo-700 mt-0.5 truncate" title={ctos[client.ctoId]?.name || 'Nao cadastrada'}>
+                              {ctos[client.ctoId]?.name || 'Nao cadastrada'}
+                            </span>
+                          </div>
+
+                          {/* PORTA */}
+                          <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Porta</span>
+                            <span className="text-xs font-black text-slate-700 mt-0.5">Porta {client.port}</span>
+                          </div>
+
+                          {/* CIRCUITO */}
+                          <div className="bg-amber-50/40 border border-amber-100/50 rounded-xl p-2.5 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-black text-amber-500/70 tracking-wider">Circuito</span>
+                            <span className="text-xs font-black text-amber-700 font-mono mt-0.5">{client.circuit || 'Não informado'}</span>
+                          </div>
+
+                          {/* BAIRRO */}
+                          <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider">Bairro</span>
+                            <span className="text-xs font-bold text-slate-700 mt-0.5 truncate" title={client.address.neighborhood}>
+                              {client.address.neighborhood || 'Não informado'}
+                            </span>
                           </div>
                         </div>
                       </div>
