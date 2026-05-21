@@ -12,7 +12,7 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isSignedIn() { return true; }
     function canAccess(createdBy) {
-      return (createdBy == 'augusto' || createdBy == 'alessandro' || request.auth != null);
+      return createdBy is string && createdBy.size() > 0;
     }
     
     function isValidAddress(addr) {

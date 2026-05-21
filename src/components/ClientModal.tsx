@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError } from '../lib/firebase';
-import { collection, query, getDocs, where, doc, serverTimestamp, setDoc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, serverTimestamp, setDoc, updateDoc, orderBy, onSnapshot } from 'firebase/firestore';
 import { X, Save, Users, CreditCard, Box, Loader2, Search, MapPin, Calendar, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Client, CTO, OperationType } from '../types';
@@ -40,14 +40,18 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
   useEffect(() => {
     if (!auth.currentUser || !isOpen) return;
 
-    // Load CTOs for selection
+    // Load CTOs for selection in real-time
     setLoadingCtos(true);
     setErrorMessage(null);
     const q = query(collection(db, 'ctos'), orderBy('name', 'asc'));
-    getDocs(q).then(snap => {
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
       setCtos(snap.docs.map(d => ({ id: d.id, ...d.data() } as CTO)));
       setLoadingCtos(false);
-    }).catch(() => setLoadingCtos(false));
+    }, (error) => {
+      console.error("Erro ao carregar CTOs no ClientModal (onSnapshot):", error);
+      setLoadingCtos(false);
+    });
 
     if (client) {
       setFormData({
@@ -72,6 +76,10 @@ export function ClientModal({ isOpen, onClose, client }: ClientModalProps) {
         address: { cep: '', street: '', number: '', neighborhood: '', city: '', state: '' }
       });
     }
+
+    return () => {
+      unsubscribe();
+    };
   }, [client, isOpen]);
 
   const handleCepBlur = async () => {
