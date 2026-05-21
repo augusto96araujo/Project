@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, onAuthStateChanged, signOut } from './lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, updateProfile } from 'firebase/auth';
-import { Activity, Clock, LogOut, Users, Box, ChevronRight, Loader2, ArrowRightLeft, Search, Network, KeyRound, User as UserIcon, AlertCircle } from 'lucide-react';
+import { Activity, Clock, LogOut, Users, Box, ChevronRight, Loader2, ArrowRightLeft, Search, Network, KeyRound, User as UserIcon, AlertCircle, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CTOList } from './components/CTOList';
 import { ClientList } from './components/ClientList';
@@ -137,6 +137,38 @@ export default function App() {
     signOut(auth);
     setUsernameInput('');
     setPasswordInput('');
+  };
+
+  const handleClearDatabase = async () => {
+    if (!window.confirm("ATENÇÃO: Você tem certeza que deseja APAGAR todas as CTOs e todos os clientes cadastrados? Esta ação é irreversível e deixará o site em branco para começar o uso.")) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const { collection, getDocs, deleteDoc, doc } = await import('firebase/firestore');
+      const { db } = await import('./lib/firebase');
+      
+      const clientsCol = collection(db, 'clients');
+      const clientsSnap = await getDocs(clientsCol);
+      for (const docSnap of clientsSnap.docs) {
+        await deleteDoc(doc(db, 'clients', docSnap.id));
+      }
+      
+      const ctosCol = collection(db, 'ctos');
+      const ctosSnap = await getDocs(ctosCol);
+      for (const docSnap of ctosSnap.docs) {
+        await deleteDoc(doc(db, 'ctos', docSnap.id));
+      }
+      
+      alert("Banco de dados limpo com sucesso! Todas as CTOs e clientes foram removidos para começar o uso em branco.");
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao limpar banco de dados: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -318,6 +350,15 @@ export default function App() {
               </div>
             )}
           </div>
+          <button 
+            id="clear-db-btn"
+            onClick={handleClearDatabase}
+            className="flex items-center gap-4 p-3 hover:bg-slate-800 text-slate-500 hover:text-amber-500 transition-all rounded-xl"
+            title="Apagar todas as CTOs e Clientes do banco para recomeçar em branco"
+          >
+            <Trash2 className="w-5 h-5 shrink-0" />
+            {isSidebarOpen && <span className="text-sm font-semibold">Zerar Banco</span>}
+          </button>
           <button 
             id="logout-btn"
             onClick={handleLogout}

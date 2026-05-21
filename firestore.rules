@@ -54,7 +54,7 @@ service cloud.firestore {
                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'capacity', 'address', 'updatedAt'])
                    );
 
-      allow delete: if isSignedIn() && canAccess(existing().createdBy);
+      allow delete: if true;
     }
 
     match /clients/{clientId} {
@@ -95,7 +95,7 @@ service cloud.firestore {
                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'cpf', 'port', 'circuit', 'address', 'updatedAt', 'ctoId', 'lastMaintenanceDate', 'lastMaintenanceByName', 'inWaitingQueue', 'inWaitingQueueBy', 'inWaitingQueueByName', 'addedToQueueAt'])
                    );
 
-      allow delete: if isSignedIn() && canAccess(existing().createdBy);
+      allow delete: if true;
     }
   }
 }
